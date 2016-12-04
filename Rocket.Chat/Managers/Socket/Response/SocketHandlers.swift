@@ -10,6 +10,7 @@ import Foundation
 import Starscream
 import RealmSwift
 import SwiftyJSON
+import Bugsnag
 
 extension SocketManager {
     
@@ -18,6 +19,10 @@ extension SocketManager {
         
         guard result.msg != nil else {
             return Log.debug("Msg is invalid: \(result.result)")
+        }
+        
+        guard !result.isError() else {
+            return handleError(result, socket: socket)
         }
         
         switch result.msg! {
@@ -45,6 +50,16 @@ extension SocketManager {
         SocketManager.send(["msg": "pong"])
     }
     
+    fileprivate func handleError(_ result: SocketResponse, socket: WebSocket) {
+        let error = result.result["error"]
+    
+        let exception = NSException(name: NSExceptionName(rawValue: error["error"].string ?? "Unknown"),
+                                    reason: error["reason"].string ?? "No reason",
+                                    userInfo: nil)
+        
+        Bugsnag.notify(exception)
+    }
+    
     fileprivate func handleEventSubscription(_ result: SocketResponse, socket: WebSocket) {
         let handlers = events[result.event ?? ""]
         handlers?.forEach({ (handler) in
@@ -59,6 +74,7 @@ extension SocketManager {
         
         // Handle model updates
         if let collection = result.collection {
+            guard let msg = result.msg else { return }
             guard let identifier = result.result["id"].string else { return }
             let fields = result.result["fields"]
             
@@ -66,6 +82,17 @@ extension SocketManager {
             case "users":
                 let user = Realm.getOrCreate(User.self, primaryKey: identifier, values: fields)
                 Realm.update(user)
+            case "subscriptions":
+                if msg == .Added || msg == .Changed {
+                    let object = Realm.getOrCreate(Subscription.self, primaryKey: identifier, values: fields)
+                    Realm.update(object)
+                }
+                
+                if msg == .Removed {
+                    let object = Realm.getOrCreate(Subscription.self, primaryKey: identifier, values: fields)
+                    Realm.delete(object)
+                }
+                
             default: break
             }
         }

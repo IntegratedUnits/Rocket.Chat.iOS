@@ -7,6 +7,7 @@ def shared_pods
   # Crash Report
   pod 'Fabric'
   pod 'Crashlytics'
+  pod 'Bugsnag'
 
   # Code utilities
   pod 'SwiftyJSON'
@@ -15,6 +16,7 @@ def shared_pods
   pod 'SideMenu'
   pod 'SlackTextViewController'
   pod 'MobilePlayer'
+  pod 'URBMediaFocusViewController'
 
   # Database
   pod 'RealmSwift'

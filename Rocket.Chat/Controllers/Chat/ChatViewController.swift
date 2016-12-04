@@ -11,13 +11,17 @@ import RealmSwift
 import SlackTextViewController
 import SafariServices
 import MobilePlayer
+import URBMediaFocusViewController
 
 class ChatViewController: SLKTextViewController {
     
     @IBOutlet weak var activityIndicator: UIActivityIndicatorView!
     weak var chatTitleView: ChatTitleView?
+    weak var chatPreviewModeView: ChatPreviewModeView?
+    lazy var mediaFocusViewController = URBMediaFocusViewController()
     
-    var searchResult: Results<User>?
+    var searchResult: [String: Any] = [:]
+    
     var messagesToken: NotificationToken!
     var messages: Results<Message>!
     var subscription: Subscription! {
@@ -44,6 +48,9 @@ class ChatViewController: SLKTextViewController {
         navigationController?.navigationBar.barTintColor = UIColor.white
         navigationController?.navigationBar.tintColor = UIColor(rgb: 0x5B5B5B, alphaVal: 1)
 
+        mediaFocusViewController.shouldDismissOnTap = true
+        mediaFocusViewController.shouldShowPhotoActions = true
+        
         isInverted = false
         bounces = true
         shakeToClearEnabled = true
@@ -56,6 +63,20 @@ class ChatViewController: SLKTextViewController {
         setupTextViewSettings()
     }
     
+    override func viewWillLayoutSubviews() {
+        super.viewWillLayoutSubviews()
+        
+        let insets = UIEdgeInsets(
+            top: 0,
+            left: 0,
+            bottom: chatPreviewModeView?.frame.height ?? 0,
+            right: 0
+        )
+        
+        collectionView?.contentInset = insets
+        collectionView?.scrollIndicatorInsets = insets
+    }
+    
     fileprivate func setupTextViewSettings() {
         textInputbar.autoHideRightButton = true
 
@@ -66,7 +87,7 @@ class ChatViewController: SLKTextViewController {
         textView.registerMarkdownFormattingSymbol("```", withTitle: "Preformatted")
         textView.registerMarkdownFormattingSymbol(">", withTitle: "Quote")
         
-        registerPrefixes(forAutoCompletion: ["@"])
+        registerPrefixes(forAutoCompletion: ["@", "#"])
     }
     
     fileprivate func setupTitleView() {
@@ -117,26 +138,48 @@ class ChatViewController: SLKTextViewController {
     }
     
     override func didChangeAutoCompletionPrefix(_ prefix: String, andWord word: String) {
-        guard let users = try? Realm().objects(User.self) else { return }
+        searchResult = [:]
         
         if prefix == "@" && word.characters.count > 0 {
-            self.searchResult = users.filter(NSPredicate(format: "username BEGINSWITH[c] %@", word))
+            guard let users = try? Realm().objects(User.self).filter(NSPredicate(format: "username BEGINSWITH[c] %@", word)) else { return }
+
+            for user in users {
+                if let username = user.username {
+                    searchResult[username] = user
+                }
+            }
+            
+            if "here".contains(word) {
+                searchResult["here"] = UIImage(named: "Hashtag")
+            }
+            
+            if "all".contains(word) {
+                searchResult["all"] = UIImage(named: "Hashtag")
+            }
+
+        } else if prefix == "#" && word.characters.count > 0 {
+            guard let channels = try? Realm().objects(Subscription.self).filter("auth != nil && (privateType == 'c' || privateType == 'p') && name BEGINSWITH[c] %@", word) else { return }
+            
+            for channel in channels {
+                searchResult[channel.name] = channel.type == .channel ? UIImage(named: "Hashtag") : UIImage(named: "Lock")
+            }
+
         }
         
-        let show = (self.searchResult?.count ?? 0 > 0)
-        self.showAutoCompletionView(show)
+        let show = (searchResult.count > 0)
+        showAutoCompletionView(show)
     }
     
     override func heightForAutoCompletionView() -> CGFloat {
-        return AutocompleteCell.minimumHeight * CGFloat(searchResult?.count ?? 1)
+        return AutocompleteCell.minimumHeight * CGFloat(searchResult.count)
     }
     
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return self.searchResult?.count ?? 0
+        return searchResult.keys.count
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        return self.autoCompletionCellForRowAtIndexPath(indexPath)
+        return autoCompletionCellForRowAtIndexPath(indexPath)
     }
     
     override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
@@ -144,21 +187,29 @@ class ChatViewController: SLKTextViewController {
     }
     
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        guard let user = searchResult?[indexPath.row] else { return }
-        guard let username = user.username else { return }
-        acceptAutoCompletion(with: "\(username): ", keepPrefix: true)
+        let key = Array(searchResult.keys)[indexPath.row]
+        acceptAutoCompletion(with: "\(key) ", keepPrefix: true)
     }
     
     func autoCompletionCellForRowAtIndexPath(_ indexPath: IndexPath) -> AutocompleteCell {
-        let cell = self.autoCompletionView.dequeueReusableCell(withIdentifier: AutocompleteCell.identifier) as! AutocompleteCell
+        let key = Array(searchResult.keys)[indexPath.row]
+        let cell = autoCompletionView.dequeueReusableCell(withIdentifier: AutocompleteCell.identifier) as! AutocompleteCell
         cell.selectionStyle = .default
         
-        guard let user = self.searchResult?[indexPath.row] else {
-            return cell
+        if let user = searchResult[key] as? User {
+            cell.avatarView.isHidden = false
+            cell.imageViewIcon.isHidden = true
+            cell.avatarView.user = user
+        } else {
+            cell.avatarView.isHidden = true
+            cell.imageViewIcon.isHidden = false
+            
+            if let image = searchResult[key] as? UIImage {
+                cell.imageViewIcon.image = image.imageWithTint(.lightGray)
+            }
         }
-        
-        cell.avatarView.user = user
-        cell.labelTitle.text = user.username
+
+        cell.labelTitle.text = key
         return cell
     }
     
@@ -190,12 +241,31 @@ class ChatViewController: SLKTextViewController {
         activityIndicator.startAnimating()
         title = subscription?.name
         chatTitleView?.subscription = subscription
+        
+        if subscription.isValid() {
+            updateSubscriptionMessages()
+        } else {
+            subscription.fetchRoomIdentifier({ [unowned self] (response) in
+                self.subscription = response
+            })
+        }
+        
+        if self.subscription.isJoined() {
+            setTextInputbarHidden(false, animated: false)
+            chatPreviewModeView?.removeFromSuperview()
+        } else {
+            setTextInputbarHidden(true, animated: false)
+            showChatPreviewModeView()
+        }
+    }
+    
+    fileprivate func updateSubscriptionMessages() {
         messages = subscription?.messages.sorted(byProperty: "createdAt", ascending: true)
         messagesToken = messages.addNotificationBlock { [unowned self] (changes) in
             if self.messages.count > 0 {
                 self.activityIndicator.stopAnimating()
             }
-
+            
             self.collectionView?.reloadData()
             self.collectionView?.layoutIfNeeded()
             self.scrollToBottom()
@@ -210,6 +280,17 @@ class ChatViewController: SLKTextViewController {
         }
         
         MessageManager.changes(subscription)
+    }
+    
+    fileprivate func showChatPreviewModeView() {
+        chatPreviewModeView?.removeFromSuperview()
+
+        let previewView = ChatPreviewModeView.instanceFromNib() as! ChatPreviewModeView
+        previewView.delegate = self
+        previewView.subscription = subscription
+        previewView.frame = CGRect(x: 0, y: view.frame.height - previewView.frame.height, width: view.frame.width, height: previewView.frame.height)
+        view.addSubview(previewView)
+        chatPreviewModeView = previewView
     }
     
     
@@ -243,15 +324,18 @@ extension ChatViewController {
     }
     
     override func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-        let message = messages![indexPath.row]
-
         let cell = collectionView.dequeueReusableCell(
             withReuseIdentifier: ChatMessageCell.identifier,
             for: indexPath
         ) as! ChatMessageCell
 
         cell.delegate = self
-        cell.message = message
+        
+        if messages?.count ?? 0 > indexPath.row {
+            let message = messages![indexPath.row]
+            cell.message = message
+        }
+
         return cell
     }
     
@@ -269,6 +353,24 @@ extension ChatViewController: UICollectionViewDelegateFlowLayout {
         let fullWidth = UIScreen.main.bounds.size.width
         let height = ChatMessageCell.cellMediaHeightFor(message: message)
         return CGSize(width: fullWidth, height: height)
+    }
+    
+}
+
+
+// MARK: ChatPreviewModeViewProtocol
+
+extension ChatViewController: ChatPreviewModeViewProtocol {
+    
+    func userDidJoinedSubscription() {
+        guard let auth = AuthManager.isAuthenticated() else { return }
+        guard let subscription = self.subscription else { return }
+        
+        Realm.execute { (realm) in
+            subscription.auth = auth
+        }
+        
+        self.subscription = subscription
     }
     
 }
@@ -296,6 +398,14 @@ extension ChatViewController: ChatMessageCellProtocol {
         controller.title = attachment.title
         controller.activityItems = [attachment.title, videoURL]
         present(controller, animated: true, completion: nil)
+    }
+    
+    func openImageFromCell(attachment: Attachment, thumbnail: UIImageView) {
+        if let image = thumbnail.image {
+            mediaFocusViewController.show(image, from: thumbnail)
+        } else {
+            mediaFocusViewController.showImage(from: attachment.fullImageURL(), from: thumbnail)
+        }
     }
 
 }
