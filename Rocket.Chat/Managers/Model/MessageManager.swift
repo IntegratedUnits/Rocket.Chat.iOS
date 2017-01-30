@@ -9,40 +9,48 @@
 import Foundation
 import RealmSwift
 
-
 struct MessageManager {
-    static let historySize = 50
+    static let historySize = 30
 }
 
-
 extension MessageManager {
-    
-    static func getHistory(_ subscription: Subscription, completion: @escaping MessageCompletion) {
+
+    static func getHistory(_ subscription: Subscription, lastMessageDate: Date?, completion: @escaping MessageCompletionObjectsList<Message>) {
+        var lastDate: Any!
+
+        if let lastMessageDate = lastMessageDate {
+            lastDate = ["$date": lastMessageDate.timeIntervalSince1970 * 1000]
+        } else {
+            lastDate = NSNull()
+        }
+
         let request = [
             "msg": "method",
             "method": "loadHistory",
-            "params": ["\(subscription.rid)", NSNull(), historySize, [
+            "params": ["\(subscription.rid)", lastDate, historySize, [
                 "$date": Date().timeIntervalSince1970 * 1000
             ]]
         ] as [String : Any]
-        
-        SocketManager.send(request) { (response) in
+
+        SocketManager.send(request) { response in
             guard !response.isError() else { return Log.debug(response.result.string) }
-            
+
             let messages = List<Message>()
             let list = response.result["result"]["messages"].array
-            
-            list?.forEach({ (obj) in
-                let message = Message(dict: obj)
-                message.subscription = subscription
+
+            list?.forEach { object in
+                let message = Message.getOrCreate(values: object, updates: { (object) in
+                    object?.subscription = subscription
+                })
+
                 messages.append(message)
-            })
-            
+            }
+
             Realm.update(messages)
-            completion(response)
+            completion(Array(messages))
         }
     }
-    
+
     static func changes(_ subscription: Subscription) {
         let eventName = "\(subscription.rid)"
         let request = [
@@ -50,16 +58,16 @@ extension MessageManager {
             "name": "stream-room-messages",
             "params": [eventName, false]
         ] as [String : Any]
-        
-        SocketManager.subscribe(request, eventName: eventName) { (response) in
+
+        SocketManager.subscribe(request, eventName: eventName) { response in
             guard !response.isError() else { return Log.debug(response.result.string) }
-            
+
             let object = response.result["fields"]["args"][0]
-            let message = Message(dict: object)
-            message.subscription = subscription
-            
+            let message = Message.getOrCreate(values: object, updates: { (object) in
+                object?.subscription = subscription
+            })
+
             Realm.update(message)
         }
     }
-
 }
