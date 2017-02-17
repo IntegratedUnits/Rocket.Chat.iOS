@@ -12,6 +12,7 @@ import SwiftyJSON
 import RealmSwift
 
 public typealias RequestCompletion = (JSON?, Bool) -> Void
+public typealias VoidCompletion = () -> Void
 public typealias MessageCompletion = (SocketResponse) -> Void
 public typealias SocketCompletion = (WebSocket?, Bool) -> Void
 public typealias MessageCompletionObject <T: Object> = (T) -> Void
@@ -51,6 +52,11 @@ class SocketManager {
     static func disconnect(_ completion: @escaping SocketCompletion) {
         sharedInstance.internalConnectionHandler = completion
         sharedInstance.socket?.disconnect()
+    }
+
+    static func clear() {
+        sharedInstance.internalConnectionHandler = nil
+        sharedInstance.connectionHandlers = [:]
     }
 
     // MARK: Messages
@@ -103,8 +109,13 @@ extension SocketManager {
 
                 })
 
+                UserManager.userDataChanges()
                 UserManager.changes()
                 SubscriptionManager.changes(auth)
+
+                if let userId = auth.userId {
+                    PushManager.updateUser(userId)
+                }
             })
         })
     }
@@ -164,7 +175,7 @@ extension SocketManager: WebSocketDelegate {
     }
 
     func websocketDidReceiveMessage(socket: WebSocket, text: String) {
-        let json = JSON.parse(text)
+        let json = JSON(parseJSON: text)
 
         // JSON is invalid
         guard json.exists() else {

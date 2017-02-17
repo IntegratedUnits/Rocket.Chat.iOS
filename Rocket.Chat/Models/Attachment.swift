@@ -27,16 +27,16 @@ class Attachment: BaseModel {
     dynamic var titleLink = ""
     dynamic var titleLinkDownload = true
 
-    dynamic var imageURL: String? = nil
-    dynamic var imageType: String? = nil
+    dynamic var imageURL: String?
+    dynamic var imageType: String?
     dynamic var imageSize = 0
 
-    dynamic var audioURL: String? = nil
-    dynamic var audioType: String? = nil
+    dynamic var audioURL: String?
+    dynamic var audioType: String?
     dynamic var audioSize = 0
 
-    dynamic var videoURL: String? = nil
-    dynamic var videoType: String? = nil
+    dynamic var videoURL: String?
+    dynamic var videoType: String?
     dynamic var videoSize = 0
     var videoThumbPath: URL? {
         let path = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
@@ -56,8 +56,8 @@ extension Attachment {
         guard let auth = AuthManager.isAuthenticated() else { return nil }
         guard let userId = auth.userId else { return nil }
         guard let token = auth.token else { return nil }
-        guard let siteURL = auth.settings?.siteURL else { return nil }
-        var urlString = "\(siteURL)\(path)?rc_uid=\(userId)&rc_token=\(token)"
+        guard let baseURL = auth.baseURL() else { return nil }
+        var urlString = "\(baseURL)\(path)?rc_uid=\(userId)&rc_token=\(token)"
         urlString = urlString.replacingOccurrences(of: "//", with: "/")
         return URL(string: urlString)
     }
@@ -67,6 +67,11 @@ extension Attachment {
     }
 
     func fullImageURL() -> URL? {
+        guard let imageURL = imageURL else { return nil }
+        if imageURL.contains("http://") || imageURL.contains("https://") {
+            return URL(string: imageURL)
+        }
+
         return Attachment.fullURLWith(imageURL)
     }
 

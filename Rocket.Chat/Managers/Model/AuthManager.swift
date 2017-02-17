@@ -10,12 +10,11 @@ import Foundation
 import RealmSwift
 
 struct AuthManager {
-
     /**
         - returns: Last auth object (sorted by lastAccess), if exists.
     */
     static func isAuthenticated() -> Auth? {
-        guard let auths = try? Realm().objects(Auth.self).sorted(byProperty: "lastAccess", ascending: false) else { return nil}
+        guard let auths = try? Realm().objects(Auth.self).sorted(byKeyPath: "lastAccess", ascending: false) else { return nil}
         return auths.first
     }
 }
@@ -34,6 +33,7 @@ extension AuthManager {
     */
     static func resume(_ auth: Auth, completion: @escaping MessageCompletion) {
         guard let url = URL(string: auth.serverURL) else { return }
+
         SocketManager.connect(url) { (socket, connected) in
             guard connected else {
                 guard let response = SocketResponse(
@@ -58,6 +58,7 @@ extension AuthManager {
                     return
                 }
 
+                PushManager.updatePushToken()
                 completion(response)
             }
         }
@@ -106,8 +107,26 @@ extension AuthManager {
                 auth.tokenExpires = Date.dateFromInterval(date)
             }
 
+            PushManager.updatePushToken()
+
             Realm.update(auth)
             completion(response)
+        }
+    }
+
+    /**
+        Logouts user from the app, clear database
+        and disconnects from the socket.
+     */
+    static func logout(completion: @escaping VoidCompletion) {
+        SocketManager.disconnect { (_, _) in
+            SocketManager.clear()
+
+            Realm.execute({ (realm) in
+                realm.deleteAll()
+            })
+
+            completion()
         }
     }
 

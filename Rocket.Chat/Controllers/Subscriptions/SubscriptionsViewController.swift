@@ -31,6 +31,22 @@ final class SubscriptionsViewController: BaseViewController {
         }
     }
 
+    weak var viewUserMenu: SubscriptionUserStatusView?
+    @IBOutlet weak var viewUser: UIView! {
+        didSet {
+            let gesture = UITapGestureRecognizer(target: self, action: #selector(viewUserDidTap))
+            viewUser.addGestureRecognizer(gesture)
+        }
+    }
+
+    @IBOutlet weak var viewUserStatus: UIView!
+    @IBOutlet weak var labelUsername: UILabel!
+    @IBOutlet weak var imageViewArrowDown: UIImageView! {
+        didSet {
+            imageViewArrowDown.image = imageViewArrowDown.image?.imageWithTint(.RCLightBlue())
+        }
+    }
+
     var assigned = false
     var isSearchingLocally = false
     var isSearchingRemotely = false
@@ -49,6 +65,7 @@ final class SubscriptionsViewController: BaseViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        updateCurrentUserInformation()
         ChatViewController.sharedInstance()?.toggleStatusBar(hide: true)
     }
 
@@ -57,6 +74,7 @@ final class SubscriptionsViewController: BaseViewController {
         textFieldSearch.resignFirstResponder()
         unregisterKeyboardNotifications()
         ChatViewController.sharedInstance()?.toggleStatusBar(hide: false)
+        dismissUserMenu()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -97,7 +115,7 @@ extension SubscriptionsViewController {
         groupSubscription()
         tableView.reloadData()
 
-        if let footerView = SubscriptionSearchMoreView.instanceFromNib() as? SubscriptionSearchMoreView {
+        if let footerView = SubscriptionSearchMoreView.instantiateFromNib() {
             footerView.delegate = self
             tableView.tableFooterView = footerView
         }
@@ -125,9 +143,37 @@ extension SubscriptionsViewController {
     func handleModelUpdates<T>(_: RealmCollectionChange<RealmSwift.Results<T>>?) {
         guard !isSearchingLocally && !isSearchingRemotely else { return }
         guard let auth = AuthManager.isAuthenticated() else { return }
-        subscriptions = auth.subscriptions.sorted(byProperty: "lastSeen", ascending: false)
+        subscriptions = auth.subscriptions.sorted(byKeyPath: "lastSeen", ascending: false)
         groupSubscription()
+        updateCurrentUserInformation()
         tableView?.reloadData()
+    }
+
+    func updateCurrentUserInformation() {
+        guard let auth = AuthManager.isAuthenticated() else { return }
+        guard let labelUsername = self.labelUsername else { return }
+        guard let viewUserStatus = self.viewUserStatus else { return }
+
+        Realm.execute { (realm) in
+            if let user = realm.object(ofType: User.self, forPrimaryKey: auth.userId) {
+                labelUsername.text = user.username ?? ""
+
+                switch user.status {
+                case .online:
+                    viewUserStatus.backgroundColor = .RCOnline()
+                    break
+                case .busy:
+                    viewUserStatus.backgroundColor = .RCBusy()
+                    break
+                case .away:
+                    viewUserStatus.backgroundColor = .RCAway()
+                    break
+                case .offline:
+                    viewUserStatus.backgroundColor = .RCInvisible()
+                    break
+                }
+            }
+        }
     }
 
     func subscribeModelChanges() {
@@ -136,7 +182,7 @@ extension SubscriptionsViewController {
 
         assigned = true
 
-        subscriptions = auth.subscriptions.sorted(byProperty: "lastSeen", ascending: false)
+        subscriptions = auth.subscriptions.sorted(byKeyPath: "lastSeen", ascending: false)
         subscriptionsToken = subscriptions?.addNotificationBlock(handleModelUpdates)
         usersToken = try? Realm().addNotificationBlock { [weak self] _, _ in
             self?.handleModelUpdates(nil)
@@ -147,13 +193,14 @@ extension SubscriptionsViewController {
 
     // swiftlint:disable function_body_length cyclomatic_complexity
     func groupSubscription() {
+        var unreadGroup: [Subscription] = []
         var favoriteGroup: [Subscription] = []
         var channelGroup: [Subscription] = []
         var directMessageGroup: [Subscription] = []
         var searchResultsGroup: [Subscription] = []
 
         guard let subscriptions = subscriptions else { return }
-        let orderSubscriptions = isSearchingRemotely ? searchResult : Array(subscriptions.sorted(byProperty: "name", ascending: true))
+        let orderSubscriptions = isSearchingRemotely ? searchResult : Array(subscriptions.sorted(byKeyPath: "name", ascending: true))
 
         for subscription in orderSubscriptions ?? [] {
             if isSearchingRemotely {
@@ -161,6 +208,11 @@ extension SubscriptionsViewController {
             }
 
             if !isSearchingLocally && !subscription.open {
+                continue
+            }
+
+            if subscription.alert {
+                unreadGroup.append(subscription)
                 continue
             }
 
@@ -191,11 +243,23 @@ extension SubscriptionsViewController {
 
             groupSubscriptions?.append(searchResultsGroup)
         } else {
+            if unreadGroup.count > 0 {
+                groupInfomation?.append([
+                    "name": String(format: "%@ (%d)", localizedString("subscriptions.unreads"), unreadGroup.count)
+                ])
+
+                unreadGroup = unreadGroup.sorted {
+                    return $0.type.rawValue < $1.type.rawValue
+                }
+
+                groupSubscriptions?.append(unreadGroup)
+            }
+
             if favoriteGroup.count > 0 {
                 groupInfomation?.append([
                     "icon": "Star",
                     "name": String(format: "%@ (%d)", localizedString("subscriptions.favorites"), favoriteGroup.count)
-                    ])
+                ])
 
                 favoriteGroup = favoriteGroup.sorted {
                     return $0.type.rawValue < $1.type.rawValue
@@ -207,7 +271,7 @@ extension SubscriptionsViewController {
             if channelGroup.count > 0 {
                 groupInfomation?.append([
                     "name": String(format: "%@ (%d)", localizedString("subscriptions.channels"), channelGroup.count)
-                    ])
+                ])
 
                 groupSubscriptions?.append(channelGroup)
             }
@@ -253,7 +317,7 @@ extension SubscriptionsViewController: UITableViewDelegate {
 
     func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
         guard let group = groupInfomation?[section] else { return nil }
-        guard let view = SubscriptionSectionView.instanceFromNib() as? SubscriptionSectionView else {
+        guard let view = SubscriptionSectionView.instantiateFromNib() else {
             return nil
         }
 
@@ -295,4 +359,55 @@ extension SubscriptionsViewController: SubscriptionSearchMoreViewDelegate {
     func buttonLoadMoreDidPressed() {
         searchOnSpotlight(textFieldSearch.text ?? "")
     }
+}
+
+extension SubscriptionsViewController: SubscriptionUserStatusViewProtocol {
+
+    func presentUserMenu() {
+        guard let viewUserMenu = SubscriptionUserStatusView.instantiateFromNib() else { return }
+
+        var newFrame = view.frame
+        newFrame.origin.y = -newFrame.height
+        viewUserMenu.frame = newFrame
+        viewUserMenu.delegate = self
+        viewUserMenu.parentController = self
+
+        view.addSubview(viewUserMenu)
+        self.viewUserMenu = viewUserMenu
+
+        newFrame.origin.y = 64
+        UIView.animate(withDuration: 0.15) {
+            viewUserMenu.frame = newFrame
+            self.imageViewArrowDown.transform = CGAffineTransform(rotationAngle: CGFloat.pi)
+        }
+    }
+
+    func dismissUserMenu() {
+        guard let viewUserMenu = viewUserMenu else { return }
+
+        var newFrame = viewUserMenu.frame
+        newFrame.origin.y = -newFrame.height
+
+        UIView.animate(withDuration: 0.15, animations: {
+            viewUserMenu.frame = newFrame
+            self.imageViewArrowDown.transform = CGAffineTransform(rotationAngle: CGFloat(0))
+        }) { (_) in
+            viewUserMenu.removeFromSuperview()
+        }
+    }
+
+    func viewUserDidTap(sender: Any) {
+        textFieldSearch.resignFirstResponder()
+
+        if let _ = viewUserMenu {
+            dismissUserMenu()
+        } else {
+            presentUserMenu()
+        }
+    }
+
+    func userDidPressedOption() {
+        dismissUserMenu()
+    }
+
 }
