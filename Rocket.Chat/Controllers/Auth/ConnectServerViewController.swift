@@ -11,7 +11,7 @@ import SwiftyJSON
 
 final class ConnectServerViewController: BaseViewController {
 
-    internal let defaultURL = "https://demo.rocket.chat"
+    internal let defaultURL = "https://chat.iu.com.pk"
     internal var connecting = false
     internal var serverURL: URL!
 
