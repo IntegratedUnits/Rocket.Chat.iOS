@@ -66,7 +66,7 @@ final class SubscriptionsViewController: BaseViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         updateCurrentUserInformation()
-        ChatViewController.sharedInstance()?.toggleStatusBar(hide: true)
+        ChatViewController.sharedInstance()?.toggleStatusBar(hide: false)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -183,6 +183,7 @@ extension SubscriptionsViewController {
         assigned = true
 
         subscriptions = auth.subscriptions.sorted(byKeyPath: "lastSeen", ascending: false)
+        
         subscriptionsToken = subscriptions?.addNotificationBlock(handleModelUpdates)
         usersToken = try? Realm().addNotificationBlock { [weak self] _, _ in
             self?.handleModelUpdates(nil)

@@ -109,7 +109,23 @@ final class ChatViewController: SLKTextViewController {
         if let subscription = subscriptions.first {
             self.subscription = subscription
         }
-
+        
+        //
+        let rid = UserDefaults.standard.string(forKey: "ridString")
+        let value = UserDefaults.standard.bool(forKey: "notification")
+        
+        if (value)
+        {
+            for var test in subscriptions
+            {
+                if (test.rid == rid)
+                {
+                    self.subscription = test
+                    UserDefaults.standard.set(false, forKey: "notification")
+                    UserDefaults.standard.synchronize()
+                }
+            }
+        }
         view.bringSubview(toFront: activityIndicatorContainer)
     }
 
