@@ -12,12 +12,38 @@ import UIKit
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
+
+    
+    func registerForNotification()
+    {
+        
+//        var action1:UIMutableUserNotificationAction = UIMutableUserNotificationAction()
+//        action1.activationMode = UIUserNotificationActivationMode.background
+//        action1.title = "Say something"
+//        action1.identifier = "inline-reply"
+//        action1.behavior = UIUserNotificationActionBehavior.textInput
+//        
+//        let category:UIMutableUserNotificationCategory = UIMutableUserNotificationCategory()
+//        category.identifier = "INVITE_CATEGORY"
+//        
+//
+//        category.setActions([action1], for: UIUserNotificationActionContext.default)
+//        category.setActions([action1], for: UIUserNotificationActionContext.minimal)
+//
+//        let categories = NSSet(object: category) as! Set<UIUserNotificationCategory>
+
+        let settings = (UIUserNotificationSettings(types: [.alert, .badge, .sound], categories: nil))
+        
+        UIApplication.shared.registerUserNotificationSettings(settings)
+        UIApplication.shared.registerForRemoteNotifications()
+
+    }
+    
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplicationLaunchOptionsKey: Any]?) -> Bool {
         Launcher().prepareToLaunch(with: launchOptions)
 
-        application.registerUserNotificationSettings(UIUserNotificationSettings(types: [.alert, .badge, .sound], categories: nil))
-        application.registerForRemoteNotifications()
+        registerForNotification()
 
         return true
     }
@@ -30,118 +56,101 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 SocketManager.disconnect({ (_, _) in })
             }
         }
+//        let localNotification:UILocalNotification = UILocalNotification()
+//        localNotification.alertAction = "Testing inline reply notificaions on iOS9"
+//        localNotification.alertBody = "Woww it works!!"
+//        localNotification.fireDate = NSDate(timeIntervalSinceNow: 5) as Date
+//        localNotification.category = "INVITE_CATEGORY";
+//        UIApplication.shared.scheduleLocalNotification(localNotification)
     }
- 
     func applicationWillEnterForeground(_ application: UIApplication) {
-        
-        UIApplication.shared.applicationIconBadgeNumber = UIApplication.shared.applicationIconBadgeNumber - 1
-
+        UIApplication.shared.applicationIconBadgeNumber = 0
     }
     // MARK: Remote Notification
-
     func application(_ application: UIApplication, didReceive notification: UILocalNotification) {
         Log.debug("Notification: \(notification)")
     }
-
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any]) {
-        
-        UIApplication.shared.applicationIconBadgeNumber = UIApplication.shared.applicationIconBadgeNumber - 1
-        
-        Log.debug("Notification: \(userInfo)")
-        
-        Log.debug("Data: \(userInfo["ejson"])")
-        
+        UIApplication.shared.applicationIconBadgeNumber = 0
         if let jsonString = userInfo["ejson"] as? NSString {
-            Log.debug("JSON DATA: \(jsonString)")
-            
             let data = (jsonString as NSString).data(using: String.Encoding.utf8.rawValue)
-            
             do{
                 let unArchDictionary = try JSONSerialization.jsonObject(with: data!, options: JSONSerialization.ReadingOptions.allowFragments) as? NSDictionary
-                Log.debug("JSON DATA: \(unArchDictionary)")
-                
-                //let typeString = unArchDictionary?["type"] as? NSString
-                
                 let ridString = unArchDictionary?["rid"] as? NSString
-                
-                //let nameString = unArchDictionary?["name"] as? NSString
-                
-                
                 if let sender = unArchDictionary?["sender"] as? NSDictionary {
-                    Log.debug("sender: \(sender)")
-                    
                     if let idString = sender["_id"] as? NSString {
-                        Log.debug("id of sender: \(idString)")
-                        
-                        
                         UserDefaults.standard.set(true, forKey: "notification")
-                        
                         UserDefaults.standard.set(ridString, forKey: "ridString")
-                        
                         UserDefaults.standard.synchronize()
-                        
-                        //ChatViewController.sharedInstance()?.viewDidLoad()
-                        
                     }
                 }
-                
             }
             catch{
-                Log.debug("exception thron")
+                Log.debug("exception thrown")
             }
-            
         }
-
     }
 
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-
-        UIApplication.shared.applicationIconBadgeNumber = UIApplication.shared.applicationIconBadgeNumber - 1
-        
-        Log.debug("Data: \(userInfo["ejson"])")
-        
+        UIApplication.shared.applicationIconBadgeNumber = 0
         if let jsonString = userInfo["ejson"] as? NSString {
-            Log.debug("JSON DATA: \(jsonString)")
-            
             let data = (jsonString as NSString).data(using: String.Encoding.utf8.rawValue)
-            
             do{
                 let unArchDictionary = try JSONSerialization.jsonObject(with: data!, options: JSONSerialization.ReadingOptions.allowFragments) as? NSDictionary
-                Log.debug("JSON DATA: \(unArchDictionary)")
-                
                 let typeString = unArchDictionary?["type"] as? NSString
-                
                 let ridString = unArchDictionary?["rid"] as? NSString
-
-                //let nameString = unArchDictionary?["name"] as? NSString
-
-                
                 if let sender = unArchDictionary?["sender"] as? NSDictionary {
-                    Log.debug("sender: \(sender)")
-                    
                     if let idString = sender["_id"] as? NSString {
-                        Log.debug("id of sender: \(idString)")
-                        
-                        
                         UserDefaults.standard.set(true, forKey: "notification")
-                        
                         UserDefaults.standard.set(ridString, forKey: "ridString")
-                        
                         UserDefaults.standard.synchronize()
-
-                        //ChatViewController.sharedInstance()?.viewDidLoad()
-                        
                     }
                 }
-
             }
             catch{
-                Log.debug("exception thron")
+                Log.debug("exception thrown")
             }
-
         }
     }
 
+//    func application(_ application: UIApplication, handleActionWithIdentifier identifier: String?, forRemoteNotification userInfo: [AnyHashable : Any], withResponseInfo responseInfo: [AnyHashable : Any], completionHandler: @escaping () -> Swift.Void)
+//    {
+//        Log.debug("identifier: \(identifier)")
+//
+//        if (identifier?.isEqual("inline-reply"))!
+//        {
+//            Log.debug("userInfo: \(userInfo)")
+//            
+//            let reply = responseInfo[UIUserNotificationActionResponseTypedTextKey]
+//
+//            Log.debug("reply: \(reply)")
+//
+//        }
+//    }
+//    func application(_ application: UIApplication, handleActionWithIdentifier identifier: String?, for notification: UILocalNotification, withResponseInfo responseInfo: [AnyHashable : Any], completionHandler: @escaping () -> Swift.Void)
+//    {
+//        Log.debug("identifier: \(identifier)")
+//        
+//        if (identifier?.isEqual("inline-reply"))!
+//        {
+//            //Log.debug("userInfo: \(userInfo)")
+//            
+//            //rid of the person whom to text
+//            var rid:NSString = ""
+//            
+//            
+//            let reply = responseInfo[UIUserNotificationActionResponseTypedTextKey]
+//            
+//            let chat: ChatViewController = ChatViewController()
+//            let value = chat.canPressRightButton()
+//            
+//            chat.sendMessageFromBackground(reply as! NSString, rid)
+//            if value
+//            {
+//                Log.debug("reply: \(reply)")
+//            }
+//        }
+//    }
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         UserDefaults.standard.set(deviceToken.hexString, forKey: PushManager.kDeviceTokenKey)
 //        Log.debug("deviceToken , key: \(deviceToken.hexString, PushManager.kDeviceTokenKey)")

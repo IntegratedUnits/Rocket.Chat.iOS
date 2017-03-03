@@ -247,6 +247,33 @@ final class ChatViewController: SLKTextViewController {
         }
     }
 
+    func sendMessageFromBackground(_ text:NSString, _ rid:NSString) {
+        guard let message:NSString = text else { return }
+        rightButton.isEnabled = false
+        
+        NotificationCenter.default.addObserver(self, selector: #selector(ChatViewController.reconnect), name: NSNotification.Name.UIApplicationDidBecomeActive, object: nil)
+        SocketManager.addConnectionHandler(token: socketHandlerToken, handler: self)
+        
+        guard let auth = AuthManager.isAuthenticated() else { return }
+        let subscriptions = auth.subscriptions.sorted(byKeyPath: "lastSeen", ascending: false)
+        if let subscription = subscriptions.first {
+            self.subscription = subscription
+        }
+                
+        for var test in subscriptions
+        {
+            if (test.rid == rid as String)
+            {
+                subscription = test
+            }
+        }
+        
+        SubscriptionManager.sendTextMessage(message as String, subscription: subscription) { [weak self] _ in
+            self?.textView.text = ""
+            self?.rightButton.isEnabled = true
+        }
+    }
+    
     // MARK: Subscription
 
     fileprivate func markAsRead() {
