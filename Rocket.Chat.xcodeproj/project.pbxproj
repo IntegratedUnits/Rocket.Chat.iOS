@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // !$*UTF8*$!
 {
 	archiveVersion = 1;
@@ -1681,6 +1682,7 @@
 	};
 	rootObject = 41DF76D71D2C50710028DBF8 /* Project object */;
 }
+=======
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -6328,3 +6330,4 @@ fi
 	<string>41DF76D71D2C50710028DBF8</string>
 </dict>
 </plist>
+>>>>>>> develop

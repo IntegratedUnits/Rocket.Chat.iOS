@@ -45,9 +45,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplicationLaunchOptionsKey: Any]?) -> Bool {
         Launcher().prepareToLaunch(with: launchOptions)
 
+<<<<<<< HEAD
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { (_, _) in }
         application.registerForRemoteNotifications()
+=======
         registerForNotification()
+>>>>>>> develop
 
         return true
     }
@@ -75,6 +78,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func applicationWillEnterForeground(_ application: UIApplication) {
         UIApplication.shared.applicationIconBadgeNumber = 0
     }
+<<<<<<< HEAD
 
     func application(_ app: UIApplication, open url: URL, options: [UIApplicationOpenURLOptionsKey : Any] = [:]) -> Bool {
         return GIDSignIn.sharedInstance().handle(
@@ -86,12 +90,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     // MARK: Remote Notification
 
+=======
     // MARK: Remote Notification
     func application(_ application: UIApplication, didReceive notification: UILocalNotification) {
         Log.debug("Notification: \(notification)")
     }
+>>>>>>> develop
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any]) {
-        Log.debug("Notification: \(userInfo)")
         UIApplication.shared.applicationIconBadgeNumber = 0
         if let jsonString = userInfo["ejson"] as? NSString {
             let data = (jsonString as NSString).data(using: String.Encoding.utf8.rawValue)
@@ -113,7 +118,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-        Log.debug("Notification: \(userInfo)")
         UIApplication.shared.applicationIconBadgeNumber = 0
         if let jsonString = userInfo["ejson"] as? NSString {
             let data = (jsonString as NSString).data(using: String.Encoding.utf8.rawValue)
