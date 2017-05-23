@@ -13,9 +13,31 @@ extension ChatViewController: SocketConnectionHandler {
     func socketDidConnect(socket: SocketManager) {
         chatHeaderViewStatus?.removeFromSuperview()
 
+        NotificationCenter.default.addObserver(self, selector: #selector(ChatViewController.reconnect), name: NSNotification.Name.UIApplicationDidBecomeActive, object: nil)
+        SocketManager.addConnectionHandler(token: socketHandlerToken, handler: self)
+        
         DispatchQueue.main.async { [weak self] in
             if let subscription = self?.subscription {
                 self?.subscription = subscription
+                
+                guard let auth = AuthManager.isAuthenticated() else { return }
+                let subscriptions = auth.subscriptions.sorted(byKeyPath: "lastSeen", ascending: false)
+                //
+                let rid = UserDefaults.standard.string(forKey: "ridString")
+                let value = UserDefaults.standard.bool(forKey: "notification")
+                
+                if (value)
+                {
+                    for var test in subscriptions
+                    {
+                        if (test.rid == rid)
+                        {
+                            self?.subscription = test
+                            UserDefaults.standard.set(false, forKey: "notification")
+                            UserDefaults.standard.synchronize()
+                        }
+                    }
+                }
             }
         }
 
